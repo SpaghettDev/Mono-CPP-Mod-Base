@@ -16,7 +16,7 @@ Mono::Mono()
 
 bool Mono::init()
 {
-	m_hMono = GetModuleHandleA("mono.dll");
+	m_hMono = GetModuleHandleA("mono-2.0-bdwgc.dll");
 	if (m_hMono == NULL)
 		return false;
 
@@ -44,16 +44,7 @@ bool Mono::init()
 }
 
 
-void* Mono::getCompiledMethod(const char* className, const char* methodName, int param_count, const char* assemblyName)
-{
-	PROC_FUNC_CHECK(MonoMethod*, pMethod, getMethod(className, methodName, param_count, assemblyName, ""));
-
-	PROC_FUNC_CHECK(void*, pCompiledMethod, m_mono_compile_method(pMethod));
-
-	return pCompiledMethod;
-}
-
-MonoClass* Mono::getClass(const char* className, const char* assemblyName, const char* nameSpace)
+Mono::MonoClassProxy Mono::getClass(const char* className, const char* assemblyName, const char* nameSpace)
 {
 	PROC_FUNC_CHECK(MonoImage*, pImage, m_mono_image_loaded(assemblyName));
 
@@ -62,82 +53,11 @@ MonoClass* Mono::getClass(const char* className, const char* assemblyName, const
 	return pClass;
 }
 
-MonoMethod* Mono::getMethod(const char* className, const char* methodName, int param_count, const char* assemblyName, const char* nameSpace)
-{
-	PROC_FUNC_CHECK(MonoClass*, pClass, getClass(className, assemblyName, nameSpace));
-
-	PROC_FUNC_CHECK(MonoMethod*, pMethod, m_mono_class_get_method_from_name(pClass, methodName, param_count));
-
-	return pMethod;
-}
-
-MonoClass* Mono::getClassFromMethod(MonoMethod* method)
+Mono::MonoClassProxy Mono::getClassFromMethod(MonoMethod* method)
 {
 	PROC_FUNC_CHECK(MonoClass*, pClass, m_mono_method_get_class(method));
 
 	return pClass;
-}
-
-MonoClassField* Mono::getField(const char* className, const char* fieldName, const char* assemblyName, const char* nameSpace)
-{
-	PROC_FUNC_CHECK(MonoClass*, pClass, getClass(className, assemblyName, nameSpace));
-
-	PROC_FUNC_CHECK(MonoClassField*, pField, m_mono_class_get_field_from_name(pClass, fieldName));
-
-	return pField;
-}
-
-MonoClassField* Mono::getField(MonoClass* pClass, const char* fieldName)
-{
-	return m_mono_class_get_field_from_name(pClass, fieldName);
-}
-
-std::uint32_t Mono::getFieldOffset(MonoClassField* field)
-{
-	return m_mono_field_get_offset(field);
-}
-
-void Mono::getFieldValue(MonoObject* instance, MonoClassField* field, void* value)
-{
-	m_mono_field_get_value(instance, field, value);
-}
-
-void Mono::setFieldValue(MonoObject* obj, MonoClassField* field, void* value)
-{
-	m_mono_field_set_value(obj, field, value);
-}
-
-MonoVTable* Mono::getVTable(MonoClass* pClass)
-{
-	PROC_FUNC_CHECK(MonoDomain*, pDomain, m_mono_get_root_domain());
-
-	return m_mono_class_vtable(pDomain, pClass);
-}
-
-void* Mono::getStaticFieldData(MonoVTable* pVTable)
-{
-	return m_mono_vtable_get_static_field_data(pVTable);
-}
-
-void* Mono::getStaticFieldData(MonoClass* pClass)
-{
-	PROC_FUNC_CHECK(MonoVTable*, pVTable, getVTable(pClass));
-
-	return m_mono_vtable_get_static_field_data(pVTable);
-}
-
-void* Mono::getStaticFieldValue(const char* className, const char* fieldName)
-{
-	PROC_FUNC_CHECK(MonoClass*, pClass, getClass(className));
-
-	PROC_FUNC_CHECK(MonoClassField*, pField, getField(pClass, fieldName));
-
-	PROC_FUNC_CHECK(void*, pFieldData, getStaticFieldData(pClass));
-
-	// addr
-	std::uint32_t uFieldOffset = getFieldOffset(pField);
-
-	return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(pFieldData) + uFieldOffset);
 }
 
 MonoObject* Mono::invoke(MonoMethod* method, void* obj, void** params)
@@ -147,4 +67,76 @@ MonoObject* Mono::invoke(MonoMethod* method, void* obj, void** params)
 
 	MonoObject* exc;
 	return m_mono_runtime_invoke(method, obj, params, &exc);
+}
+
+
+MonoMethod* Mono::MonoClassProxy::getMethod(const char* methodName, int param_count)
+{
+	PROC_FUNC_CHECK(MonoMethod*, pMethod, Mono::Instance().m_mono_class_get_method_from_name(m_class, methodName, param_count));
+
+	return pMethod;
+}
+
+void* Mono::MonoClassProxy::getCompiledMethod(const char* methodName, int param_count)
+{
+	PROC_FUNC_CHECK(MonoMethod*, pMethod, getMethod(methodName, param_count));
+
+	PROC_FUNC_CHECK(void*, pCompiledMethod, Mono::Instance().m_mono_compile_method(pMethod));
+
+	return pCompiledMethod;
+}
+
+MonoClassField* Mono::MonoClassProxy::getField(const char* fieldName)
+{
+	PROC_FUNC_CHECK(MonoClassField*, pField, Mono::Instance().m_mono_class_get_field_from_name(m_class, fieldName));
+
+	return pField;
+}
+
+std::uint32_t Mono::MonoClassProxy::getFieldOffset(MonoClassField* field)
+{
+	return Mono::Instance().m_mono_field_get_offset(field);
+}
+
+void Mono::MonoClassProxy::getFieldValue(MonoObject* instance, MonoClassField* field, void* value)
+{
+	Mono::Instance().m_mono_field_get_value(instance, field, value);
+}
+
+void Mono::MonoClassProxy::setFieldValue(MonoObject* obj, MonoClassField* field, void* value)
+{
+	Mono::Instance().m_mono_field_set_value(obj, field, value);
+}
+
+MonoVTable* Mono::MonoClassProxy::getVTable()
+{
+	const auto& instance = Mono::Instance();
+
+	PROC_FUNC_CHECK(MonoDomain*, pDomain, instance.m_mono_get_root_domain());
+
+	return instance.m_mono_class_vtable(pDomain, m_class);
+}
+
+void* Mono::MonoClassProxy::getStaticFieldData()
+{
+	PROC_FUNC_CHECK(MonoVTable*, pVTable, getVTable());
+
+	return Mono::Instance().m_mono_vtable_get_static_field_data(pVTable);
+}
+
+void* Mono::MonoClassProxy::getStaticFieldData(MonoVTable* pVTable)
+{
+	return Mono::Instance().m_mono_vtable_get_static_field_data(pVTable);
+}
+
+void* Mono::MonoClassProxy::getStaticFieldValue(const char* fieldName)
+{
+	PROC_FUNC_CHECK(MonoClassField*, pField, getField(fieldName));
+
+	PROC_FUNC_CHECK(void*, pFieldData, getStaticFieldData());
+
+	// addr
+	std::uint32_t uFieldOffset = getFieldOffset(pField);
+
+	return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(pFieldData) + uFieldOffset);
 }

@@ -26,6 +26,19 @@ void processHack(const std::vector<std::string>& args)
 		std::cout << "hello from hacks processor!" << '\n';
 
 		ValueManager::Instance().test = !ValueManager::Instance().test;
+
+		// example
+		if (auto timeClass = Mono::Instance().getClass("Time", "UnityEngine", "UnityEngine"))
+		{
+			if (auto* setTimeScale = timeClass.getMethod("set_timeScale", 1))
+			{
+				std::cout << "setting the time scale..." << '\n';
+
+				float scale = .5f;
+				void* args[1] = { &scale };
+				Mono::Instance().invoke(setTimeScale, nullptr, args);
+			}
+		}
 	
 		break;
 	}
@@ -46,17 +59,6 @@ void process(const std::string& command)
 
 	case CLI_COMMAND::HELP: {
 		std::cout << "help..." << '\n';
-
-		// example
-		/*auto* setTimeScale = Mono::Instance().getMethod("Time", "set_timeScale", 1, "UnityEngine", "UnityEngine");
-		if (setTimeScale)
-		{
-			std::cout << "setting the time scale..." << '\n';
-
-			float scale = .5f;
-			void* args[1] = { &scale };
-			Mono::Instance().invoke(setTimeScale, nullptr, args);
-		}*/
 	
 		break;
 	}
